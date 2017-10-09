@@ -33,7 +33,6 @@ import javax.mail.util.SharedByteArrayInputStream;
 import org.apache.james.mailbox.exception.MailboxException;
 import org.apache.james.mailbox.model.Attachment;
 import org.apache.james.mailbox.model.AttachmentId;
-import org.apache.james.mailbox.model.Cid;
 import org.apache.james.mailbox.model.MailboxId;
 import org.apache.james.mailbox.model.MailboxPath;
 import org.apache.james.mailbox.model.MessageAttachment;
@@ -83,6 +82,8 @@ public abstract class MessageWithAttachmentMapperTest {
 
         attachmentsMailbox = createMailbox(MailboxPath.forUser("benwa", "Attachments"));
 
+        mapperProvider.createMailboxMapper().save(attachmentsMailbox);
+
         Attachment attachment = Attachment.builder()
                 .attachmentId(AttachmentId.from("123"))
                 .bytes("attachment".getBytes())
@@ -93,34 +94,39 @@ public abstract class MessageWithAttachmentMapperTest {
                 .bytes("attachment2".getBytes())
                 .type("content")
                 .build();
+        Attachment attachment3 = Attachment.builder()
+                .attachmentId(AttachmentId.from("789"))
+                .bytes("attachment3".getBytes())
+                .type("content")
+                .build();
         messageWith1Attachment = createMessage(attachmentsMailbox, mapperProvider.generateMessageId(), "Subject: Test7 \n\nBody7\n.\n", BODY_START, new PropertyBuilder(), 
                 ImmutableList.of(MessageAttachment.builder()
                         .attachment(attachment)
-                        .cid(Cid.from("cid"))
-                        .isInline(true)
                         .build()));
         messageWith2Attachments = createMessage(attachmentsMailbox, mapperProvider.generateMessageId(), "Subject: Test8 \n\nBody8\n.\n", BODY_START, new PropertyBuilder(),
                 ImmutableList.of(
                         MessageAttachment.builder()
-                            .attachment(attachment)
-                            .cid(Cid.from("cid"))
-                            .isInline(true)
+                            .attachment(attachment2)
                             .build(),
                         MessageAttachment.builder()
-                            .attachment(attachment2)
-                            .cid(Cid.from("cid2"))
-                            .isInline(false)
+                            .attachment(attachment3)
                             .build()));
         messageWithoutAttachment = createMessage(attachmentsMailbox, mapperProvider.generateMessageId(), "Subject: Test1 \n\nBody1\n.\n", BODY_START, new PropertyBuilder());
 
+        messageMapper.add(attachmentsMailbox, messageWithoutAttachment);
+        messageWithoutAttachment.setModSeq(messageMapper.getHighestModSeq(attachmentsMailbox));
+        messageMapper.add(attachmentsMailbox, messageWith1Attachment);
+        messageWith1Attachment.setModSeq(messageMapper.getHighestModSeq(attachmentsMailbox));
+        messageMapper.add(attachmentsMailbox, messageWith2Attachments);
+        messageWith2Attachments.setModSeq(messageMapper.getHighestModSeq(attachmentsMailbox));
+
         attachmentMapper.storeAttachmentsForMessage(ImmutableList.of(attachment), messageWith1Attachment.getMessageId());
-        attachmentMapper.storeAttachmentsForMessage(ImmutableList.of(attachment), messageWith2Attachments.getMessageId());
         attachmentMapper.storeAttachmentsForMessage(ImmutableList.of(attachment2), messageWith2Attachments.getMessageId());
+        attachmentMapper.storeAttachmentsForMessage(ImmutableList.of(attachment3), messageWith2Attachments.getMessageId());
     }
 
     @Test
     public void messagesRetrievedUsingFetchTypeFullShouldHaveAttachmentsLoadedWhenOneAttachment() throws MailboxException, IOException{
-        saveMessages();
         MessageMapper.FetchType fetchType = MessageMapper.FetchType.Full;
         Iterator<MailboxMessage> retrievedMessageIterator = messageMapper.findInMailbox(attachmentsMailbox, MessageRange.one(messageWith1Attachment.getUid()), fetchType, LIMIT);
         assertThat(retrievedMessageIterator.next().getAttachments()).isEqualTo(messageWith1Attachment.getAttachments());
@@ -128,7 +134,6 @@ public abstract class MessageWithAttachmentMapperTest {
 
     @Test
     public void messagesRetrievedUsingFetchTypeFullShouldHaveAttachmentsLoadedWhenTwoAttachments() throws MailboxException, IOException{
-        saveMessages();
         MessageMapper.FetchType fetchType = MessageMapper.FetchType.Full;
         Iterator<MailboxMessage> retrievedMessageIterator = messageMapper.findInMailbox(attachmentsMailbox, MessageRange.one(messageWith2Attachments.getUid()), fetchType, LIMIT);
         assertThat(retrievedMessageIterator.next().getAttachments()).isEqualTo(messageWith2Attachments.getAttachments());
@@ -136,7 +141,6 @@ public abstract class MessageWithAttachmentMapperTest {
 
     @Test
     public void messagesRetrievedUsingFetchTypeBodyShouldHaveAttachmentsLoadedWhenOneAttachment() throws MailboxException, IOException{
-        saveMessages();
         MessageMapper.FetchType fetchType = MessageMapper.FetchType.Body;
         Iterator<MailboxMessage> retrievedMessageIterator = messageMapper.findInMailbox(attachmentsMailbox, MessageRange.one(messageWith1Attachment.getUid()), fetchType, LIMIT);
         assertThat(retrievedMessageIterator.next().getAttachments()).isEqualTo(messageWith1Attachment.getAttachments());
@@ -145,7 +149,6 @@ public abstract class MessageWithAttachmentMapperTest {
     @Test
     public void messagesRetrievedUsingFetchTypeHeadersShouldHaveAttachmentsEmptyWhenOneAttachment() throws MailboxException, IOException{
         Assume.assumeTrue(mapperProvider.supportPartialAttachmentFetch());
-        saveMessages();
         MessageMapper.FetchType fetchType = MessageMapper.FetchType.Headers;
         Iterator<MailboxMessage> retrievedMessageIterator = messageMapper.findInMailbox(attachmentsMailbox, MessageRange.one(messageWith1Attachment.getUid()), fetchType, LIMIT);
         assertThat(retrievedMessageIterator.next().getAttachments()).isEmpty();
@@ -154,7 +157,6 @@ public abstract class MessageWithAttachmentMapperTest {
     @Test
     public void messagesRetrievedUsingFetchTypeMetadataShouldHaveAttachmentsEmptyWhenOneAttachment() throws MailboxException, IOException{
         Assume.assumeTrue(mapperProvider.supportPartialAttachmentFetch());
-        saveMessages();
         MessageMapper.FetchType fetchType = MessageMapper.FetchType.Metadata;
         Iterator<MailboxMessage> retrievedMessageIterator = messageMapper.findInMailbox(attachmentsMailbox, MessageRange.one(messageWith1Attachment.getUid()), fetchType, LIMIT);
         assertThat(retrievedMessageIterator.next().getAttachments()).isEmpty();
@@ -162,7 +164,6 @@ public abstract class MessageWithAttachmentMapperTest {
 
     @Test
     public void messagesRetrievedUsingFetchTypeFullShouldHaveAttachmentsEmptyWhenNoAttachment() throws MailboxException, IOException{
-        saveMessages();
         MessageMapper.FetchType fetchType = MessageMapper.FetchType.Full;
         Iterator<MailboxMessage> retrievedMessageIterator = messageMapper.findInMailbox(attachmentsMailbox, MessageRange.one(messageWithoutAttachment.getUid()), fetchType, LIMIT);
         assertThat(retrievedMessageIterator.next().getAttachments()).isEmpty();
@@ -170,7 +171,6 @@ public abstract class MessageWithAttachmentMapperTest {
     
     @Test
     public void messagesCanBeRetrievedInMailboxWithRangeTypeOne() throws MailboxException, IOException{
-        saveMessages();
         MessageMapper.FetchType fetchType = MessageMapper.FetchType.Full;
         assertThat(messageMapper.findInMailbox(attachmentsMailbox, MessageRange.one(messageWith1Attachment.getUid()), fetchType, LIMIT).next())
             .isEqualTo(messageWith1Attachment, fetchType);
@@ -178,7 +178,6 @@ public abstract class MessageWithAttachmentMapperTest {
 
     @Test
     public void messagesRetrievedUsingFetchTypeBodyShouldHaveBodyDataLoaded() throws MailboxException, IOException{
-        saveMessages();
         MessageMapper.FetchType fetchType = MessageMapper.FetchType.Body;
         Iterator<MailboxMessage> retrievedMessageIterator = messageMapper.findInMailbox(attachmentsMailbox, MessageRange.one(messageWith1Attachment.getUid()), fetchType, LIMIT);
         assertThat(retrievedMessageIterator.next()).isEqualTo(messageWith1Attachment, fetchType);
@@ -190,15 +189,6 @@ public abstract class MessageWithAttachmentMapperTest {
         MailboxId id = mapperProvider.generateId();
         mailbox.setMailboxId(id);
         return mailbox;
-    }
-    
-    private void saveMessages() throws MailboxException {
-        messageMapper.add(attachmentsMailbox, messageWithoutAttachment);
-        messageWithoutAttachment.setModSeq(messageMapper.getHighestModSeq(attachmentsMailbox));
-        messageMapper.add(attachmentsMailbox, messageWith1Attachment);
-        messageWith1Attachment.setModSeq(messageMapper.getHighestModSeq(attachmentsMailbox));
-        messageMapper.add(attachmentsMailbox, messageWith2Attachments);
-        messageWith2Attachments.setModSeq(messageMapper.getHighestModSeq(attachmentsMailbox));
     }
 
     private SimpleMailboxMessage createMessage(Mailbox mailbox, MessageId messageId, String content, int bodyStart, PropertyBuilder propertyBuilder, List<MessageAttachment> attachments) {

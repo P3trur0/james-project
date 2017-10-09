@@ -18,34 +18,12 @@
  ****************************************************************/
 package org.apache.james.mailbox.jpa.mail.model.openjpa;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.SequenceInputStream;
-import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.List;
-
-import javax.mail.Flags;
-import javax.persistence.Basic;
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.Embeddable;
-import javax.persistence.FetchType;
-import javax.persistence.Id;
-import javax.persistence.IdClass;
-import javax.persistence.ManyToOne;
-import javax.persistence.MappedSuperclass;
-import javax.persistence.NamedQueries;
-import javax.persistence.NamedQuery;
-import javax.persistence.OneToMany;
-import javax.persistence.OrderBy;
-
-import org.apache.commons.lang.NotImplementedException;
+import com.google.common.base.Objects;
 import org.apache.james.mailbox.MessageUid;
 import org.apache.james.mailbox.exception.MailboxException;
 import org.apache.james.mailbox.jpa.JPAId;
+import org.apache.james.mailbox.jpa.ids.JPAMessageId;
+import org.apache.james.mailbox.jpa.mail.model.JPAAttachment;
 import org.apache.james.mailbox.jpa.mail.model.JPAMailbox;
 import org.apache.james.mailbox.jpa.mail.model.JPAProperty;
 import org.apache.james.mailbox.jpa.mail.model.JPAUserFlag;
@@ -53,7 +31,6 @@ import org.apache.james.mailbox.model.ComposedMessageId;
 import org.apache.james.mailbox.model.ComposedMessageIdWithMetaData;
 import org.apache.james.mailbox.model.MessageAttachment;
 import org.apache.james.mailbox.model.MessageId;
-import org.apache.james.mailbox.store.mail.model.DefaultMessageId;
 import org.apache.james.mailbox.store.mail.model.DelegatingMailboxMessage;
 import org.apache.james.mailbox.store.mail.model.FlagsBuilder;
 import org.apache.james.mailbox.store.mail.model.MailboxMessage;
@@ -64,7 +41,17 @@ import org.apache.openjpa.persistence.jdbc.ElementJoinColumn;
 import org.apache.openjpa.persistence.jdbc.ElementJoinColumns;
 import org.apache.openjpa.persistence.jdbc.Index;
 
-import com.google.common.base.Objects;
+import javax.mail.Flags;
+import javax.persistence.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.SequenceInputStream;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Abstract base class for JPA based implementations of
@@ -234,12 +221,18 @@ public abstract class AbstractJPAMailboxMessage implements MailboxMessage {
             @ElementJoinColumn(name = "MAIL_UID", referencedColumnName = "MAIL_UID") })
     private List<JPAUserFlag> userFlags;
 
+    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER, orphanRemoval = true)
+    @OrderBy("attachmentId")
+    @ElementJoinColumns({ @ElementJoinColumn(name = "MAILBOX_ID", referencedColumnName = "MAILBOX_ID"),
+            @ElementJoinColumn(name = "MAIL_UID", referencedColumnName = "MAIL_UID") })
+    private List<JPAAttachment> attachments;
+
     public AbstractJPAMailboxMessage() {
 
     }
 
     public AbstractJPAMailboxMessage(JPAMailbox mailbox, Date internalDate, Flags flags, long contentOctets,
-            int bodyStartOctet, PropertyBuilder propertyBuilder) {
+                                     int bodyStartOctet, PropertyBuilder propertyBuilder) {
         this.mailbox = mailbox;
         this.internalDate = internalDate;
         userFlags = new ArrayList<>();
@@ -256,7 +249,15 @@ public abstract class AbstractJPAMailboxMessage implements MailboxMessage {
         for (Property property : properties) {
             this.properties.add(new JPAProperty(property, order++));
         }
+        this.attachments = new ArrayList<>();
+    }
 
+    public AbstractJPAMailboxMessage(JPAMailbox mailbox, Date internalDate, Flags flags, long contentOctets,
+                                     int bodyStartOctet, PropertyBuilder propertyBuilder, List<MessageAttachment> attachments) {
+        this(mailbox, internalDate, flags, contentOctets, bodyStartOctet, propertyBuilder);
+        for (MessageAttachment attachment : attachments) {
+            this.attachments.add(new JPAAttachment(attachment.getAttachment()));
+        }
     }
 
     /**
@@ -299,6 +300,10 @@ public abstract class AbstractJPAMailboxMessage implements MailboxMessage {
         for (Property property : properties) {
             this.properties.add(new JPAProperty(property, order++));
         }
+        this.attachments = original.getAttachments()
+                .stream()
+                .map(messageAttachment -> JPAAttachment.from(messageAttachment.getAttachment()))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -319,10 +324,10 @@ public abstract class AbstractJPAMailboxMessage implements MailboxMessage {
     @Override
     public ComposedMessageIdWithMetaData getComposedMessageIdWithMetaData() {
         return ComposedMessageIdWithMetaData.builder()
-            .modSeq(modSeq)
-            .flags(createFlags())
-            .composedMessageId(new ComposedMessageId(mailbox.getMailboxId(), getMessageId(), MessageUid.of(uid)))
-            .build();
+                .modSeq(modSeq)
+                .flags(createFlags())
+                .composedMessageId(new ComposedMessageId(mailbox.getMailboxId(), getMessageId(), MessageUid.of(uid)))
+                .build();
     }
 
     /**
@@ -475,8 +480,8 @@ public abstract class AbstractJPAMailboxMessage implements MailboxMessage {
 
     protected String[] createUserFlags() {
         return userFlags.stream()
-            .map(JPAUserFlag::getName)
-            .toArray(String[]::new);
+                .map(JPAUserFlag::getName)
+                .toArray(String[]::new);
     }
 
     /**
@@ -498,7 +503,7 @@ public abstract class AbstractJPAMailboxMessage implements MailboxMessage {
 
     @Override
     public MessageId getMessageId() {
-        return new DefaultMessageId();
+        return new JPAMessageId.Factory().generate();
     }
 
     @Override
@@ -522,7 +527,11 @@ public abstract class AbstractJPAMailboxMessage implements MailboxMessage {
 
     @Override
     public List<MessageAttachment> getAttachments() {
-        throw new NotImplementedException("Attachments are not implemented");
+        List<MessageAttachment> messageAttachments = new ArrayList<>();
+        for (JPAAttachment jpaAttachment : attachments) {
+            messageAttachments.add(MessageAttachment.builder().attachment(jpaAttachment.toAttachment()).build());
+        }
+        return messageAttachments;
     }
 
 }

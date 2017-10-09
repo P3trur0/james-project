@@ -66,6 +66,11 @@ public abstract class JPAMailboxManager extends StoreMailboxManager {
         return EnumSet.of(MailboxCapabilities.UserFlag, MailboxCapabilities.Namespace, MailboxCapabilities.Annotation);
     }
 
+    @Override
+    public EnumSet<MessageCapabilities> getSupportedMessageCapabilities() {
+        return EnumSet.of(MessageCapabilities.Attachment);
+    }
+
     /**
      * Delete all mailboxes 
      * 

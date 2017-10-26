@@ -29,6 +29,9 @@ import org.apache.james.imap.api.process.ImapProcessor;
 import org.apache.james.imap.decode.ImapDecoder;
 import org.apache.james.imap.decode.main.ImapRequestStreamHandler;
 import org.apache.james.imap.encode.ImapEncoder;
+import org.apache.james.mailbox.MailboxManager;
+import org.apache.james.mailbox.MailboxSession;
+import org.apache.james.mailbox.model.MailboxACL;
 import org.apache.james.mailbox.model.MailboxPath;
 import org.apache.james.mailbox.store.Authenticator;
 import org.apache.james.mailbox.store.Authorizator;
@@ -36,12 +39,13 @@ import org.apache.james.mpt.api.Continuation;
 import org.apache.james.mpt.api.ImapHostSystem;
 import org.apache.james.mpt.helper.ByteBufferInputStream;
 import org.apache.james.mpt.helper.ByteBufferOutputStream;
+import org.apache.james.mpt.imapmailbox.GrantRightsOnHost;
 import org.apache.james.mpt.session.ImapSessionImpl;
 import org.apache.james.user.memory.MemoryUsersRepository;
 
 import com.google.common.base.Throwables;
 
-public abstract class JamesImapHostSystem implements ImapHostSystem {
+public abstract class JamesImapHostSystem implements ImapHostSystem, GrantRightsOnHost {
 
     private MemoryUsersRepository memoryUsersRepository;
     protected Authorizator authorizator;
@@ -86,8 +90,31 @@ public abstract class JamesImapHostSystem implements ImapHostSystem {
             throws Exception {
         return new Session(continuation);
     }
+
+    protected abstract MailboxManager getMailboxManager();
     
-    public abstract void createMailbox(MailboxPath mailboxPath) throws Exception;
+    public void createMailbox(MailboxPath mailboxPath) throws Exception {
+        MailboxManager mailboxManager = getMailboxManager();
+        MailboxSession mailboxSession = mailboxManager.createSystemSession(mailboxPath.getUser());
+        mailboxManager.startProcessingRequest(mailboxSession);
+        mailboxManager.createMailbox(mailboxPath, mailboxSession);
+        mailboxManager.logout(mailboxSession, true);
+        mailboxManager.endProcessingRequest(mailboxSession);
+    }
+
+    public void grantRights(MailboxPath mailboxPath, String userName, MailboxACL.Rfc4314Rights rights) throws Exception {
+        MailboxManager mailboxManager = getMailboxManager();
+        MailboxSession mailboxSession = mailboxManager.createSystemSession(mailboxPath.getUser());
+        mailboxManager.startProcessingRequest(mailboxSession);
+        mailboxManager.setRights(mailboxPath,
+            MailboxACL.EMPTY.apply(MailboxACL.command()
+                .forUser(userName)
+                .rights(rights)
+                .asAddition()),
+            mailboxManager.createSystemSession(userName));
+        mailboxManager.logout(mailboxSession, true);
+        mailboxManager.endProcessingRequest(mailboxSession);
+    }
 
     class Session implements org.apache.james.mpt.api.Session {
         ByteBufferOutputStream out;

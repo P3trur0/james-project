@@ -41,11 +41,13 @@ public class ImapStepdefs {
     private static final String LOCALHOST = "127.0.0.1";
 
     private final UserStepdefs userStepdefs;
+    private final MainStepdefs mainStepdefs;
     private final Map<String, IMAPMessageReader> imapConnections;
 
     @Inject
-    private ImapStepdefs(UserStepdefs userStepdefs) {
+    private ImapStepdefs(UserStepdefs userStepdefs, MainStepdefs mainStepdefs) {
         this.userStepdefs = userStepdefs;
+        this.mainStepdefs = mainStepdefs;
         this.imapConnections = Maps.newHashMap();
     }
 
@@ -53,9 +55,21 @@ public class ImapStepdefs {
     public void hasMessageInMailbox(String mailbox) throws Throwable {
         try (IMAPMessageReader imapMessageReader = new IMAPMessageReader(LOCALHOST, IMAP_PORT);) {
             assertThat(
-                imapMessageReader.userReceivedMessageInMailbox(userStepdefs.lastConnectedUser,
-                    userStepdefs.passwordByUser.get(userStepdefs.lastConnectedUser),
+                imapMessageReader.userReceivedMessageInMailbox(userStepdefs.getConnectedUser(),
+                    userStepdefs.getUserPassword(userStepdefs.getConnectedUser()),
                     mailbox))
+                .isTrue();
+        }
+    }
+
+    @Then("^the message has IMAP flag \"([^\"]*)\" in mailbox \"([^\"]*)\" for \"([^\"]*)\"$")
+    public void hasMessageWithFlagInMailbox(String flags, String mailbox, String username) throws Throwable {
+        try (IMAPMessageReader imapMessageReader = new IMAPMessageReader(LOCALHOST, IMAP_PORT);) {
+            assertThat(
+                imapMessageReader.userReceivedMessageWithFlagsInMailbox(username,
+                    userStepdefs.getUserPassword(username),
+                    mailbox,
+                    flags))
                 .isTrue();
         }
     }
@@ -64,8 +78,8 @@ public class ImapStepdefs {
     public void hasANotificationAboutNewMessagesInMailbox(int numOfNewMessage, String mailbox) throws Throwable {
         try (IMAPMessageReader imapMessageReader = new IMAPMessageReader(LOCALHOST, IMAP_PORT);) {
             assertThat(
-                imapMessageReader.userGetNotifiedForNewMessagesWhenSelectingMailbox(userStepdefs.lastConnectedUser,
-                    userStepdefs.passwordByUser.get(userStepdefs.lastConnectedUser),
+                imapMessageReader.userGetNotifiedForNewMessagesWhenSelectingMailbox(userStepdefs.getConnectedUser(),
+                    userStepdefs.getUserPassword(userStepdefs.getConnectedUser()),
                     numOfNewMessage, mailbox))
                 .isTrue();
         }
@@ -75,8 +89,8 @@ public class ImapStepdefs {
     public void hasNoMessageInMailbox(String mailbox) throws Throwable {
         try (IMAPMessageReader imapMessageReader = new IMAPMessageReader(LOCALHOST, IMAP_PORT);) {
             assertThat(
-                imapMessageReader.userDoesNotReceiveMessageInMailbox(userStepdefs.lastConnectedUser,
-                    userStepdefs.passwordByUser.get(userStepdefs.lastConnectedUser),
+                imapMessageReader.userDoesNotReceiveMessageInMailbox(userStepdefs.getConnectedUser(),
+                    userStepdefs.getUserPassword(userStepdefs.getConnectedUser()),
                     mailbox))
                 .isTrue();
         }
@@ -86,11 +100,18 @@ public class ImapStepdefs {
     public void openImapConnectionAndSelectMailbox(String mailbox) throws Throwable {
         IMAPMessageReader imapMessageReader = new IMAPMessageReader(LOCALHOST, IMAP_PORT);
 
-        String login = userStepdefs.lastConnectedUser;
-        String password = userStepdefs.passwordByUser.get(login);
+        String login = userStepdefs.getConnectedUser();
+        String password = userStepdefs.getUserPassword(login);
 
         imapMessageReader.connectAndSelect(login, password, mailbox);
         imapConnections.put(mailbox, imapMessageReader);
+    }
+
+    @Then("^the user set flags via IMAP to \"([^\"]*)\" for all messages in mailbox \"([^\"]*)\"$")
+    public void setFlagsViaIMAPInMailbox(String flags, String mailbox) throws Throwable {
+        IMAPMessageReader imapMessageReader = imapConnections.get(mailbox);
+        imapMessageReader.setFlagsForAllMessagesInMailbox(flags);
+        mainStepdefs.awaitMethod.run();
     }
 
     @Then("^the user has a IMAP RECENT and a notification about (\\d+) new messages on connection for mailbox \"([^\"]*)\"$")
@@ -104,12 +125,13 @@ public class ImapStepdefs {
     public void copyAMessageByIMAP(String srcMailbox, String destMailbox) throws Throwable {
         IMAPMessageReader imapMessageReader = new IMAPMessageReader(LOCALHOST, IMAP_PORT);
 
-        String login = userStepdefs.lastConnectedUser;
-        String password = userStepdefs.passwordByUser.get(login);
+        String login = userStepdefs.getConnectedUser();
+        String password = userStepdefs.getUserPassword(login);
 
         imapMessageReader.connectAndSelect(login, password, srcMailbox);
         assertThat(imapMessageReader).isNotNull();
         imapMessageReader.copyFirstMessage(destMailbox);
+        mainStepdefs.awaitMethod.run();
     }
 
     @Then("^the user has IMAP EXPUNGE and a notification for (\\d+) message sequence number on connection for mailbox \"([^\"]*)\"$")

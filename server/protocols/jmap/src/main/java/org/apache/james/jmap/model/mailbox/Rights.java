@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.function.BinaryOperator;
 
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.james.mailbox.MailboxSession;
 import org.apache.james.mailbox.model.MailboxACL;
 import org.apache.james.mailbox.model.MailboxACL.EntryKey;
 import org.apache.james.mailbox.model.MailboxACL.Rfc4314Rights;
@@ -42,11 +43,15 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.github.fge.lambdas.Throwing;
 import com.github.steveash.guavate.Guavate;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multimap;
 
 public class Rights {
+    @VisibleForTesting
+    static final Optional<Boolean> UNSUPPORTED = Optional.empty();
+
     public enum Right {
         Administer(MailboxACL.Right.Administer),
         Expunge(MailboxACL.Right.PerformExpunge),
@@ -93,6 +98,10 @@ public class Rights {
             return new Username(mailboxPath.getUser());
         }
 
+        public static Username fromSession(MailboxSession mailboxSession) {
+            return new Username(mailboxSession.getUser().getUserName());
+        }
+
         private final String value;
 
         public Username(String value) {
@@ -118,6 +127,7 @@ public class Rights {
         public final int hashCode() {
             return Objects.hash(value);
         }
+
     }
 
     public static class Builder {
@@ -229,6 +239,36 @@ public class Rights {
                     EntryKey.createUserEntryKey(entry.getKey().value),
                     toMailboxAclRights(entry.getValue()))))
             .reduce(MailboxACL.EMPTY, union);
+    }
+
+    public Optional<Boolean> mayReadItems(Username username) {
+        return containsRight(username, Right.Read);
+    }
+
+    public Optional<Boolean> mayAddItems(Username username) {
+        return containsRight(username, Right.Insert);
+    }
+
+    public Optional<Boolean> mayCreateChild(Username username) {
+        return UNSUPPORTED;
+    }
+
+    public Optional<Boolean> mayRemoveItems(Username username) {
+        return containsRight(username, Right.DeleteMessages);
+    }
+
+    public Optional<Boolean> mayRename(Username username) {
+        return UNSUPPORTED;
+    }
+
+    public Optional<Boolean> mayDelete(Username username) {
+        return UNSUPPORTED;
+    }
+
+    private Optional<Boolean> containsRight(Username username, Right right) {
+        return Optional.ofNullable(rights.get(username))
+            .filter(rightList -> !rightList.isEmpty())
+            .map(rightList -> rightList.contains(right));
     }
 
     private Rfc4314Rights toMailboxAclRights(Collection<Right> rights) {

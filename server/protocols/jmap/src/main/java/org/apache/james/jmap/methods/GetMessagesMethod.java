@@ -32,16 +32,19 @@ import org.apache.james.jmap.json.FieldNamePropertyFilter;
 import org.apache.james.jmap.model.ClientId;
 import org.apache.james.jmap.model.GetMessagesRequest;
 import org.apache.james.jmap.model.GetMessagesResponse;
+import org.apache.james.jmap.model.Keywords;
 import org.apache.james.jmap.model.Message;
 import org.apache.james.jmap.model.MessageFactory;
 import org.apache.james.jmap.model.MessageFactory.MetaDataWithContent;
 import org.apache.james.jmap.model.MessageProperties;
 import org.apache.james.jmap.model.MessageProperties.HeaderProperty;
+import org.apache.james.jmap.utils.KeywordsCombiner;
 import org.apache.james.mailbox.MailboxSession;
 import org.apache.james.mailbox.MessageIdManager;
 import org.apache.james.mailbox.exception.MailboxException;
 import org.apache.james.mailbox.model.FetchGroupImpl;
 import org.apache.james.mailbox.model.MailboxId;
+import org.apache.james.mailbox.model.MessageMetaData;
 import org.apache.james.mailbox.model.MessageResult;
 import org.apache.james.metrics.api.MetricFactory;
 import org.apache.james.util.MDCBuilder;
@@ -62,9 +65,11 @@ public class GetMessagesMethod implements Method {
     private static final Logger LOGGER = LoggerFactory.getLogger(GetMessagesMethod.class);
     private static final Method.Request.Name METHOD_NAME = Method.Request.name("getMessages");
     private static final Method.Response.Name RESPONSE_NAME = Method.Response.name("messages");
+    private static final KeywordsCombiner ACCUMULATOR = new KeywordsCombiner();
     private final MessageFactory messageFactory;
     private final MessageIdManager messageIdManager;
     private final MetricFactory metricFactory;
+    private final Keywords.KeywordsFactory keywordsFactory;
 
     @Inject
     @VisibleForTesting GetMessagesMethod(
@@ -74,6 +79,8 @@ public class GetMessagesMethod implements Method {
         this.messageFactory = messageFactory;
         this.messageIdManager = messageIdManager;
         this.metricFactory = metricFactory;
+        this.keywordsFactory = Keywords.factory()
+            .filterImapNonExposedKeywords();
     }
     
     @Override
@@ -163,10 +170,16 @@ public class GetMessagesMethod implements Method {
                 .distinct()
                 .collect(Guavate.toImmutableList());
             try {
+                Keywords keywords = messageResults.stream()
+                    .map(MessageMetaData::getFlags)
+                    .map(keywordsFactory::fromFlags)
+                    .reduce(ACCUMULATOR)
+                    .get();
                 return Stream.of(
                     MetaDataWithContent.builderFromMessageResult(firstMessageResult)
                         .messageId(firstMessageResult.getMessageId())
                         .mailboxIds(mailboxIds)
+                        .keywords(keywords)
                         .build());
             } catch (Exception e) {
                 LOGGER.error("Can not convert MessageResults to MetaData with content for messageId " + firstMessageResult.getMessageId() + " in " + mailboxIds, e);

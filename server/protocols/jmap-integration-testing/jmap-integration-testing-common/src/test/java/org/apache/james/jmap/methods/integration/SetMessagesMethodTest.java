@@ -31,7 +31,6 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasEntry;
-import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.isEmptyOrNullString;
@@ -66,13 +65,16 @@ import org.apache.james.mailbox.MailboxListener;
 import org.apache.james.mailbox.exception.MailboxException;
 import org.apache.james.mailbox.model.Attachment;
 import org.apache.james.mailbox.model.ComposedMessageId;
+import org.apache.james.mailbox.model.MailboxACL;
 import org.apache.james.mailbox.model.MailboxConstants;
 import org.apache.james.mailbox.model.MailboxId;
 import org.apache.james.mailbox.model.MailboxPath;
 import org.apache.james.mailbox.model.MessageId;
 import org.apache.james.mailbox.model.MessageResult;
 import org.apache.james.mailbox.store.event.EventFactory;
+import org.apache.james.mailbox.store.probe.ACLProbe;
 import org.apache.james.mailbox.store.probe.MailboxProbe;
+import org.apache.james.modules.ACLProbeImpl;
 import org.apache.james.modules.MailboxProbeImpl;
 import org.apache.james.probe.DataProbe;
 import org.apache.james.util.ZeroedInputStream;
@@ -134,6 +136,7 @@ public abstract class SetMessagesMethodTest {
     private MailboxProbe mailboxProbe;
     private DataProbe dataProbe;
     private MessageIdProbe messageProbe;
+    private ACLProbe aclProbe;
 
     @Before
     public void setup() throws Throwable {
@@ -142,6 +145,7 @@ public abstract class SetMessagesMethodTest {
         mailboxProbe = jmapServer.getProbe(MailboxProbeImpl.class);
         dataProbe = jmapServer.getProbe(DataProbeImpl.class);
         messageProbe = jmapServer.getProbe(MessageIdProbe.class);
+        aclProbe = jmapServer.getProbe(ACLProbeImpl.class);
 
         RestAssured.requestSpecification = new RequestSpecBuilder()
                 .setContentType(ContentType.JSON)
@@ -1162,6 +1166,46 @@ public abstract class SetMessagesMethodTest {
             .body(ARGUMENTS + ".created", aMapWithSize(1))
             .body(ARGUMENTS + ".created", hasKey(messageCreationId))
             .body(ARGUMENTS + ".created[\""+messageCreationId+"\"].subject", equalTo("تصور واضح للعلاقة بين النموذج الرياضي المثالي ومنظومة الظواهر"));
+    }
+
+    @Test
+    public void setMessagesShouldReturnErrorWhenUserIsNotTheOwnerOfOneOfTheMailboxes() throws Exception {
+        String alice = "alice@" + USERS_DOMAIN;
+        dataProbe.addUser(alice, "alicepassword");
+        MailboxId aliceOutbox = mailboxProbe.createMailbox("#private", alice, DefaultMailboxes.OUTBOX);
+
+        aclProbe.replaceRights(MailboxPath.forUser(alice, DefaultMailboxes.OUTBOX), USERNAME, MailboxACL.FULL_RIGHTS);
+
+        String messageCreationId = "creationId1337";
+        String fromAddress = USERNAME;
+        String requestBody = "[" +
+            "  [" +
+            "    \"setMessages\","+
+            "    {" +
+            "      \"create\": { \"" + messageCreationId  + "\" : {" +
+            "        \"from\": { \"name\": \"Me\", \"email\": \"" + fromAddress + "\"}," +
+            "        \"to\": [{ \"name\": \"BOB\", \"email\": \"someone@example.com\"}]," +
+            "        \"subject\": \"\"," +
+            "        \"mailboxIds\": [\"" + aliceOutbox.serialize() + "\", \"" + getOutboxId(accessToken) + "\"]" +
+            "      }}" +
+            "    }," +
+            "    \"#0\"" +
+            "  ]" +
+            "]";
+
+        given()
+            .header("Authorization", accessToken.serialize())
+            .body(requestBody)
+       .when()
+            .post("/jmap")
+       .then()
+            .log().ifValidationFails()
+            .statusCode(200)
+            .body(NAME, equalTo("messagesSet"))
+            .body(NAME, equalTo("messagesSet"))
+            .body(ARGUMENTS + ".notCreated", hasKey(messageCreationId))
+            .body(ARGUMENTS + ".notCreated[\""+messageCreationId+"\"].type", equalTo("error"))
+            .body(ARGUMENTS + ".notCreated[\""+messageCreationId+"\"].description", endsWith("MailboxId invalid"));
     }
 
     @Test
@@ -3720,6 +3764,7 @@ public abstract class SetMessagesMethodTest {
         String messageCreationId = "creationId";
         String fromAddress = USERNAME;
         String outboxId = getOutboxId(accessToken);
+        String inboxId = getMailboxId(accessToken, Role.INBOX);
         String requestBody = "[" +
                 "  [" +
                 "    \"setMessages\","+
@@ -3742,28 +3787,26 @@ public abstract class SetMessagesMethodTest {
                 "  ]" +
                 "]";
 
-        String messageId = with()
+        with()
             .header("Authorization", accessToken.serialize())
             .body(requestBody)
-        // When
-        .post("/jmap")
-        .then()
-            .extract()
-            .body()
-            .<String>path(ARGUMENTS + ".created."+ messageCreationId +".id");
+        .post("/jmap");
 
         calmlyAwait.atMost(30, TimeUnit.SECONDS).until(() -> isAnyMessageFoundInInbox(accessToken));
 
         given()
             .header("Authorization", accessToken.serialize())
-            .body("[[\"getMessageList\", {\"filter\":{\"body\": \"Test\"}}, \"#0\"]]")
+            .body("[[\"getMessageList\", {\"filter\":{" +
+                "   \"body\": \"Test body\", " +
+                "   \"inMailboxes\":[\"" + inboxId  + "\"]}}, " +
+                "\"#0\"]]")
             .when()
             .post("/jmap")
         .then()
             .statusCode(200)
             .log().ifValidationFails()
             .body(NAME, equalTo("messageList"))
-            .body(ARGUMENTS + ".messageIds", hasItem(messageId));
+            .body(ARGUMENTS + ".messageIds", hasSize(1));
     }
 
     @Test

@@ -26,15 +26,16 @@ import org.apache.james.imap.api.process.ImapProcessor;
 import org.apache.james.imap.encode.main.DefaultImapEncoderFactory;
 import org.apache.james.imap.main.DefaultImapDecoderFactory;
 import org.apache.james.imap.processor.main.DefaultImapProcessorFactory;
+import org.apache.james.mailbox.MailboxManager;
 import org.apache.james.mailbox.acl.GroupMembershipResolver;
 import org.apache.james.mailbox.acl.MailboxACLResolver;
 import org.apache.james.mailbox.acl.SimpleGroupMembershipResolver;
 import org.apache.james.mailbox.acl.UnionMailboxACLResolver;
 import org.apache.james.mailbox.maildir.MaildirMailboxSessionMapperFactory;
 import org.apache.james.mailbox.maildir.MaildirStore;
-import org.apache.james.mailbox.model.MailboxPath;
 import org.apache.james.mailbox.store.JVMMailboxPathLocker;
 import org.apache.james.mailbox.store.StoreMailboxManager;
+import org.apache.james.mailbox.store.StoreRightManager;
 import org.apache.james.mailbox.store.StoreSubscriptionManager;
 import org.apache.james.mailbox.store.mail.model.DefaultMessageId;
 import org.apache.james.mailbox.store.mail.model.impl.MessageParser;
@@ -44,7 +45,6 @@ import org.apache.james.metrics.logger.DefaultMetricFactory;
 import org.apache.james.mpt.api.ImapFeatures;
 import org.apache.james.mpt.api.ImapFeatures.Feature;
 import org.apache.james.mpt.host.JamesImapHostSystem;
-import org.apache.james.mpt.imapmailbox.MailboxCreationDelegate;
 
 public class MaildirHostSystem extends JamesImapHostSystem {
 
@@ -70,8 +70,9 @@ public class MaildirHostSystem extends JamesImapHostSystem {
         GroupMembershipResolver groupMembershipResolver = new SimpleGroupMembershipResolver();
         MessageParser messageParser = new MessageParser();
 
-        mailboxManager = new StoreMailboxManager(mailboxSessionMapperFactory, authenticator, authorizator, locker, aclResolver,
-                groupMembershipResolver, messageParser, new DefaultMessageId.Factory());
+        StoreRightManager storeRightManager = new StoreRightManager(mailboxSessionMapperFactory, aclResolver, groupMembershipResolver);
+        mailboxManager = new StoreMailboxManager(mailboxSessionMapperFactory, authenticator, authorizator, locker,
+                messageParser, new DefaultMessageId.Factory(), storeRightManager);
         mailboxManager.init();
 
         final ImapProcessor defaultImapProcessorFactory = 
@@ -107,8 +108,8 @@ public class MaildirHostSystem extends JamesImapHostSystem {
     }
 
     @Override
-    public void createMailbox(MailboxPath mailboxPath) throws Exception {
-        new MailboxCreationDelegate(mailboxManager).createMailbox(mailboxPath);
+    protected MailboxManager getMailboxManager() {
+        return mailboxManager;
     }
 
     @Override
@@ -120,4 +121,5 @@ public class MaildirHostSystem extends JamesImapHostSystem {
     public void setQuotaLimits(long maxMessageQuota, long maxStorageQuota) throws Exception {
         throw new NotImplementedException();
     }
+
 }

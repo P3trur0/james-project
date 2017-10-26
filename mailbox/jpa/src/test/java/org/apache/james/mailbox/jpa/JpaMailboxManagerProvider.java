@@ -27,13 +27,14 @@ import org.apache.james.mailbox.acl.MailboxACLResolver;
 import org.apache.james.mailbox.acl.SimpleGroupMembershipResolver;
 import org.apache.james.mailbox.acl.UnionMailboxACLResolver;
 import org.apache.james.mailbox.exception.MailboxException;
-import org.apache.james.mailbox.jpa.ids.JPAMessageId;
 import org.apache.james.mailbox.jpa.mail.JPAModSeqProvider;
 import org.apache.james.mailbox.jpa.mail.JPAUidProvider;
 import org.apache.james.mailbox.jpa.openjpa.OpenJPAMailboxManager;
 import org.apache.james.mailbox.store.Authenticator;
 import org.apache.james.mailbox.store.Authorizator;
 import org.apache.james.mailbox.store.JVMMailboxPathLocker;
+import org.apache.james.mailbox.store.StoreRightManager;
+import org.apache.james.mailbox.store.mail.model.DefaultMessageId;
 import org.apache.james.mailbox.store.mail.model.impl.MessageParser;
 
 import com.google.common.base.Throwables;
@@ -54,9 +55,10 @@ public class JpaMailboxManagerProvider {
 
         Authenticator noAuthenticator = null;
         Authorizator noAuthorizator = null;
+        StoreRightManager storeRightManager = new StoreRightManager(mf, aclResolver, groupMembershipResolver);
         OpenJPAMailboxManager openJPAMailboxManager = new OpenJPAMailboxManager(mf, noAuthenticator, noAuthorizator,
-            aclResolver, groupMembershipResolver, messageParser, new JPAMessageId.Factory(), LIMIT_ANNOTATIONS,
-            LIMIT_ANNOTATION_SIZE);
+                messageParser, new DefaultMessageId.Factory(), LIMIT_ANNOTATIONS,
+                LIMIT_ANNOTATION_SIZE, storeRightManager);
 
         try {
             openJPAMailboxManager.init();

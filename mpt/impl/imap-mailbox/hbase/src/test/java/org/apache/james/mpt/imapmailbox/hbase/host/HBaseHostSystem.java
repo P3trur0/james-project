@@ -30,6 +30,7 @@ import org.apache.james.imap.api.process.ImapProcessor;
 import org.apache.james.imap.encode.main.DefaultImapEncoderFactory;
 import org.apache.james.imap.main.DefaultImapDecoderFactory;
 import org.apache.james.imap.processor.main.DefaultImapProcessorFactory;
+import org.apache.james.mailbox.MailboxManager;
 import org.apache.james.mailbox.MailboxSession;
 import org.apache.james.mailbox.SubscriptionManager;
 import org.apache.james.mailbox.acl.GroupMembershipResolver;
@@ -40,7 +41,7 @@ import org.apache.james.mailbox.hbase.HBaseMailboxManager;
 import org.apache.james.mailbox.hbase.HBaseMailboxSessionMapperFactory;
 import org.apache.james.mailbox.hbase.mail.HBaseModSeqProvider;
 import org.apache.james.mailbox.hbase.mail.HBaseUidProvider;
-import org.apache.james.mailbox.model.MailboxPath;
+import org.apache.james.mailbox.store.StoreRightManager;
 import org.apache.james.mailbox.store.StoreSubscriptionManager;
 import org.apache.james.mailbox.store.mail.model.DefaultMessageId;
 import org.apache.james.mailbox.store.mail.model.impl.MessageParser;
@@ -50,7 +51,6 @@ import org.apache.james.metrics.api.NoopMetricFactory;
 import org.apache.james.mpt.api.ImapFeatures;
 import org.apache.james.mpt.api.ImapFeatures.Feature;
 import org.apache.james.mpt.host.JamesImapHostSystem;
-import org.apache.james.mpt.imapmailbox.MailboxCreationDelegate;
 
 public class HBaseHostSystem extends JamesImapHostSystem {
 
@@ -102,9 +102,10 @@ public class HBaseHostSystem extends JamesImapHostSystem {
         MailboxACLResolver aclResolver = new UnionMailboxACLResolver();
         GroupMembershipResolver groupMembershipResolver = new SimpleGroupMembershipResolver();
         MessageParser messageParser = new MessageParser();
-        
-        mailboxManager = new HBaseMailboxManager(mapperFactory, authenticator, authorizator, aclResolver, groupMembershipResolver,
-                messageParser, messageIdFactory);
+
+        StoreRightManager storeRightManager = new StoreRightManager(mapperFactory, aclResolver, groupMembershipResolver);
+        mailboxManager = new HBaseMailboxManager(mapperFactory, authenticator, authorizator, messageParser,
+                                                 messageIdFactory, storeRightManager);
         mailboxManager.init();
 
         SubscriptionManager subscriptionManager = new StoreSubscriptionManager(mapperFactory);
@@ -155,10 +156,10 @@ public class HBaseHostSystem extends JamesImapHostSystem {
     }
 
     @Override
-    public void createMailbox(MailboxPath mailboxPath) throws Exception{
-        new MailboxCreationDelegate(mailboxManager).createMailbox(mailboxPath);
+    protected MailboxManager getMailboxManager() {
+        return mailboxManager;
     }
-    
+
     @Override
     public boolean supports(Feature... features) {
         return SUPPORTED_FEATURES.supports(features);

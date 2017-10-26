@@ -33,12 +33,14 @@ public class MailboxNamespace {
         Delegated("Delegated"),
         Personal("Personal");
 
+        @SuppressWarnings("unused")
         private final String type;
 
         Type(String type) {
             this.type = type;
         }
     }
+
     public static MailboxNamespace delegated(String owner) {
         Preconditions.checkArgument(!StringUtils.isBlank(owner));
         return new MailboxNamespace(Type.Delegated, Optional.of(owner));

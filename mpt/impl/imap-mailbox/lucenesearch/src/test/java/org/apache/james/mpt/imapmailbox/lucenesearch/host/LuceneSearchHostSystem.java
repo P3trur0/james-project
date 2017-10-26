@@ -31,6 +31,7 @@ import org.apache.james.imap.api.process.ImapProcessor;
 import org.apache.james.imap.encode.main.DefaultImapEncoderFactory;
 import org.apache.james.imap.main.DefaultImapDecoderFactory;
 import org.apache.james.imap.processor.main.DefaultImapProcessorFactory;
+import org.apache.james.mailbox.MailboxManager;
 import org.apache.james.mailbox.MailboxSession;
 import org.apache.james.mailbox.SubscriptionManager;
 import org.apache.james.mailbox.acl.GroupMembershipResolver;
@@ -48,9 +49,9 @@ import org.apache.james.mailbox.jpa.mail.JPAUidProvider;
 import org.apache.james.mailbox.jpa.openjpa.OpenJPAMailboxManager;
 import org.apache.james.mailbox.lucene.search.LuceneMessageSearchIndex;
 import org.apache.james.mailbox.model.MailboxConstants;
-import org.apache.james.mailbox.model.MailboxPath;
 import org.apache.james.mailbox.model.MessageId;
 import org.apache.james.mailbox.store.JVMMailboxPathLocker;
+import org.apache.james.mailbox.store.StoreRightManager;
 import org.apache.james.mailbox.store.mail.model.DefaultMessageId;
 import org.apache.james.mailbox.store.mail.model.impl.MessageParser;
 import org.apache.james.mailbox.store.quota.DefaultQuotaRootResolver;
@@ -59,7 +60,6 @@ import org.apache.james.metrics.logger.DefaultMetricFactory;
 import org.apache.james.mpt.api.ImapFeatures;
 import org.apache.james.mpt.api.ImapFeatures.Feature;
 import org.apache.james.mpt.host.JamesImapHostSystem;
-import org.apache.james.mpt.imapmailbox.MailboxCreationDelegate;
 import org.apache.lucene.store.FSDirectory;
 
 import com.google.common.base.Throwables;
@@ -117,9 +117,15 @@ public class LuceneSearchHostSystem extends JamesImapHostSystem {
             GroupMembershipResolver groupMembershipResolver = new SimpleGroupMembershipResolver();
             MessageParser messageParser = new MessageParser();
 
-            mailboxManager = new OpenJPAMailboxManager(factory, authenticator, authorizator, locker, false, aclResolver, groupMembershipResolver, messageParser, messageIdFactory, MailboxConstants.DEFAULT_LIMIT_ANNOTATIONS_ON_MAILBOX, MailboxConstants.DEFAULT_LIMIT_ANNOTATION_SIZE);
+            StoreRightManager storeRightManager = new StoreRightManager(factory, aclResolver, groupMembershipResolver);
+            boolean useStreaming = false;
+            mailboxManager = new OpenJPAMailboxManager(factory, authenticator, authorizator, locker, useStreaming,
+                                                       messageParser, messageIdFactory,
+                                                       MailboxConstants.DEFAULT_LIMIT_ANNOTATIONS_ON_MAILBOX,
+                                                       MailboxConstants.DEFAULT_LIMIT_ANNOTATION_SIZE,
+                                                       storeRightManager);
 
-            LuceneMessageSearchIndex searchIndex = new LuceneMessageSearchIndex(factory, mailboxIdFactory, fsDirectory, messageIdFactory, mailboxManager);
+            LuceneMessageSearchIndex searchIndex = new LuceneMessageSearchIndex(factory, mailboxIdFactory, fsDirectory, messageIdFactory);
             searchIndex.setEnableSuffixMatch(true);
             mailboxManager.setMessageSearchIndex(searchIndex);
 
@@ -145,8 +151,8 @@ public class LuceneSearchHostSystem extends JamesImapHostSystem {
     }
 
     @Override
-    public void createMailbox(MailboxPath mailboxPath) throws Exception{
-        new MailboxCreationDelegate(mailboxManager).createMailbox(mailboxPath);
+    protected MailboxManager getMailboxManager() {
+        return mailboxManager;
     }
 
     @Override

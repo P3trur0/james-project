@@ -29,6 +29,7 @@ import org.apache.james.imap.api.process.ImapProcessor;
 import org.apache.james.imap.encode.main.DefaultImapEncoderFactory;
 import org.apache.james.imap.main.DefaultImapDecoderFactory;
 import org.apache.james.imap.processor.main.DefaultImapProcessorFactory;
+import org.apache.james.mailbox.MailboxManager;
 import org.apache.james.mailbox.MailboxSession;
 import org.apache.james.mailbox.SubscriptionManager;
 import org.apache.james.mailbox.acl.GroupMembershipResolver;
@@ -39,15 +40,15 @@ import org.apache.james.mailbox.exception.MailboxException;
 import org.apache.james.mailbox.jpa.JPAMailboxFixture;
 import org.apache.james.mailbox.jpa.JPAMailboxSessionMapperFactory;
 import org.apache.james.mailbox.jpa.JPASubscriptionManager;
-import org.apache.james.mailbox.jpa.ids.JPAMessageId;
 import org.apache.james.mailbox.jpa.mail.JPAModSeqProvider;
 import org.apache.james.mailbox.jpa.mail.JPAUidProvider;
 import org.apache.james.mailbox.jpa.openjpa.OpenJPAMailboxManager;
 import org.apache.james.mailbox.jpa.quota.JPAPerUserMaxQuotaManager;
 import org.apache.james.mailbox.jpa.quota.JpaCurrentQuotaManager;
 import org.apache.james.mailbox.model.MailboxConstants;
-import org.apache.james.mailbox.model.MailboxPath;
 import org.apache.james.mailbox.store.JVMMailboxPathLocker;
+import org.apache.james.mailbox.store.StoreRightManager;
+import org.apache.james.mailbox.store.mail.model.DefaultMessageId;
 import org.apache.james.mailbox.store.mail.model.impl.MessageParser;
 import org.apache.james.mailbox.store.quota.DefaultQuotaRootResolver;
 import org.apache.james.mailbox.store.quota.ListeningCurrentQuotaUpdater;
@@ -56,28 +57,27 @@ import org.apache.james.metrics.logger.DefaultMetricFactory;
 import org.apache.james.mpt.api.ImapFeatures;
 import org.apache.james.mpt.api.ImapFeatures.Feature;
 import org.apache.james.mpt.host.JamesImapHostSystem;
-import org.apache.james.mpt.imapmailbox.MailboxCreationDelegate;
 
 import com.google.common.collect.ImmutableList;
 
 public class JPAHostSystem extends JamesImapHostSystem {
 
     private static final JpaTestCluster JPA_TEST_CLUSTER = JpaTestCluster.create(
-        ImmutableList.<Class<?>>builder()
-            .addAll(JPAMailboxFixture.MAILBOX_PERSISTANCE_CLASSES)
-            .addAll(JPAMailboxFixture.QUOTA_PERSISTANCE_CLASSES)
-            .build());
+            ImmutableList.<Class<?>>builder()
+                    .addAll(JPAMailboxFixture.MAILBOX_PERSISTANCE_CLASSES)
+                    .addAll(JPAMailboxFixture.QUOTA_PERSISTANCE_CLASSES)
+                    .build());
 
     public static final String META_DATA_DIRECTORY = "target/user-meta-data";
     private static final ImapFeatures SUPPORTED_FEATURES = ImapFeatures.of(Feature.NAMESPACE_SUPPORT,
-        Feature.USER_FLAGS_SUPPORT,
-        Feature.ANNOTATION_SUPPORT,
-        Feature.QUOTA_SUPPORT);
+            Feature.USER_FLAGS_SUPPORT,
+            Feature.ANNOTATION_SUPPORT,
+            Feature.QUOTA_SUPPORT);
 
     public static JamesImapHostSystem build() throws Exception {
         return new JPAHostSystem();
     }
-    
+
     private JPAPerUserMaxQuotaManager maxQuotaManager;
     private OpenJPAMailboxManager mailboxManager;
 
@@ -94,7 +94,12 @@ public class JPAHostSystem extends JamesImapHostSystem {
         GroupMembershipResolver groupMembershipResolver = new SimpleGroupMembershipResolver();
         MessageParser messageParser = new MessageParser();
 
-        mailboxManager = new OpenJPAMailboxManager(mapperFactory, authenticator, authorizator, locker, false, aclResolver, groupMembershipResolver, messageParser, new JPAMessageId.Factory(), MailboxConstants.DEFAULT_LIMIT_ANNOTATIONS_ON_MAILBOX, MailboxConstants.DEFAULT_LIMIT_ANNOTATION_SIZE);
+        StoreRightManager storeRightManager = new StoreRightManager(mapperFactory, aclResolver, groupMembershipResolver);
+        boolean useStreaming = false;
+        mailboxManager = new OpenJPAMailboxManager(mapperFactory, authenticator, authorizator, locker, useStreaming,
+                messageParser, new DefaultMessageId.Factory(),
+                MailboxConstants.DEFAULT_LIMIT_ANNOTATIONS_ON_MAILBOX,
+                MailboxConstants.DEFAULT_LIMIT_ANNOTATION_SIZE, storeRightManager);
 
         DefaultQuotaRootResolver quotaRootResolver = new DefaultQuotaRootResolver(mapperFactory);
         JpaCurrentQuotaManager currentQuotaManager = new JpaCurrentQuotaManager(entityManagerFactory);
@@ -108,11 +113,11 @@ public class JPAHostSystem extends JamesImapHostSystem {
         mailboxManager.init();
 
         SubscriptionManager subscriptionManager = new JPASubscriptionManager(mapperFactory);
-        
-        final ImapProcessor defaultImapProcessorFactory = 
+
+        final ImapProcessor defaultImapProcessorFactory =
                 DefaultImapProcessorFactory.createDefaultProcessor(
-                        mailboxManager, 
-                        subscriptionManager, 
+                        mailboxManager,
+                        subscriptionManager,
                         storeQuotaManager,
                         quotaRootResolver,
                         new DefaultMetricFactory());
@@ -133,7 +138,7 @@ public class JPAHostSystem extends JamesImapHostSystem {
             mailboxManager.logout(session, false);
         }
     }
-    
+
     public void resetUserMetaData() throws Exception {
         File dir = new File(META_DATA_DIRECTORY);
         if (dir.exists()) {
@@ -143,10 +148,10 @@ public class JPAHostSystem extends JamesImapHostSystem {
     }
 
     @Override
-    public void createMailbox(MailboxPath mailboxPath) throws Exception {
-        new MailboxCreationDelegate(mailboxManager).createMailbox(mailboxPath);
+    protected MailboxManager getMailboxManager() {
+        return mailboxManager;
     }
-    
+
     @Override
     public boolean supports(Feature... features) {
         return SUPPORTED_FEATURES.supports(features);
@@ -157,4 +162,5 @@ public class JPAHostSystem extends JamesImapHostSystem {
         maxQuotaManager.setDefaultMaxMessage(maxMessageQuota);
         maxQuotaManager.setDefaultMaxStorage(maxStorageQuota);
     }
+
 }

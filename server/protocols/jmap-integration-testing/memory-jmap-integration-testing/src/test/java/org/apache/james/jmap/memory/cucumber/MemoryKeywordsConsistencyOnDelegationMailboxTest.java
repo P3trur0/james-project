@@ -17,26 +17,16 @@
  * under the License.                                           *
  ****************************************************************/
 
-package org.apache.james.mpt.imapmailbox;
+package org.apache.james.jmap.memory.cucumber;
 
-import org.apache.james.mailbox.MailboxManager;
-import org.apache.james.mailbox.MailboxSession;
-import org.apache.james.mailbox.model.MailboxPath;
+import org.junit.runner.RunWith;
 
-public class MailboxCreationDelegate {
+import cucumber.api.CucumberOptions;
+import cucumber.api.junit.Cucumber;
 
-    private final MailboxManager mailboxManager;
-
-    public MailboxCreationDelegate(MailboxManager mailboxManager) {
-        this.mailboxManager = mailboxManager;
-    }
-
-    public void createMailbox(MailboxPath mailboxPath) throws Exception{
-        MailboxSession mailboxSession = mailboxManager.createSystemSession("system");
-        mailboxManager.startProcessingRequest(mailboxSession);
-        mailboxManager.createMailbox(mailboxPath, mailboxSession);
-        mailboxManager.logout(mailboxSession, true);
-        mailboxManager.endProcessingRequest(mailboxSession);
-    }
-
+@RunWith(Cucumber.class)
+@CucumberOptions(features="classpath:cucumber/KeywordsConsistencyOnDelegationMailbox.feature",
+    glue={"org.apache.james.jmap.methods.integration", "org.apache.james.jmap.memory.cucumber"},
+    strict = true)
+public class MemoryKeywordsConsistencyOnDelegationMailboxTest {
 }

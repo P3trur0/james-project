@@ -24,6 +24,7 @@ import org.apache.james.backends.cassandra.init.CassandraModuleComposite;
 import org.apache.james.imap.encode.main.DefaultImapEncoderFactory;
 import org.apache.james.imap.main.DefaultImapDecoderFactory;
 import org.apache.james.imap.processor.main.DefaultImapProcessorFactory;
+import org.apache.james.mailbox.MailboxManager;
 import org.apache.james.mailbox.SubscriptionManager;
 import org.apache.james.mailbox.cassandra.CassandraMailboxManager;
 import org.apache.james.mailbox.cassandra.CassandraMailboxSessionMapperFactory;
@@ -47,7 +48,6 @@ import org.apache.james.mailbox.cassandra.modules.CassandraUidModule;
 import org.apache.james.mailbox.cassandra.quota.CassandraCurrentQuotaManager;
 import org.apache.james.mailbox.cassandra.quota.CassandraPerUserMaxQuotaManager;
 import org.apache.james.mailbox.exception.MailboxException;
-import org.apache.james.mailbox.model.MailboxPath;
 import org.apache.james.mailbox.quota.QuotaRootResolver;
 import org.apache.james.mailbox.store.JVMMailboxPathLocker;
 import org.apache.james.mailbox.store.StoreSubscriptionManager;
@@ -59,7 +59,6 @@ import org.apache.james.metrics.logger.DefaultMetricFactory;
 import org.apache.james.mpt.api.ImapFeatures;
 import org.apache.james.mpt.api.ImapFeatures.Feature;
 import org.apache.james.mpt.host.JamesImapHostSystem;
-import org.apache.james.mpt.imapmailbox.MailboxCreationDelegate;
 
 public class CassandraHostSystem extends JamesImapHostSystem {
 
@@ -142,11 +141,6 @@ public class CassandraHostSystem extends JamesImapHostSystem {
     protected void finalize() throws Throwable {
         super.finalize();
     }
-
-    @Override
-    public void createMailbox(MailboxPath mailboxPath) throws Exception{
-        new MailboxCreationDelegate(mailboxManager).createMailbox(mailboxPath);
-    }
     
     @Override
     public boolean supports(Feature... features) {
@@ -157,5 +151,10 @@ public class CassandraHostSystem extends JamesImapHostSystem {
     public void setQuotaLimits(long maxMessageQuota, long maxStorageQuota) throws MailboxException {
         perUserMaxQuotaManager.setDefaultMaxMessage(maxMessageQuota);
         perUserMaxQuotaManager.setDefaultMaxStorage(maxStorageQuota);
+    }
+
+    @Override
+    protected MailboxManager getMailboxManager() {
+        return mailboxManager;
     }
 }

@@ -16,29 +16,34 @@
  * specific language governing permissions and limitations      *
  * under the License.                                           *
  ****************************************************************/
-package org.apache.james.mpt.imapmailbox.maildir;
 
-import org.apache.james.mpt.api.HostSystem;
-import org.apache.james.mpt.api.ImapHostSystem;
-import org.apache.james.mpt.host.JamesImapHostSystem;
-import org.apache.james.mpt.imapmailbox.maildir.host.MaildirHostSystem;
+package org.apache.james.backends.es;
 
-import com.google.inject.AbstractModule;
-import com.google.inject.Provides;
-import com.google.inject.Singleton;
+import java.util.Objects;
 
-public class MaildirMailboxTestModule extends AbstractModule {
+public class AliasName {
+    private final String value;
+
+    public AliasName(String value) {
+        this.value = value;
+    }
+
+    public String getValue() {
+        return value;
+    }
 
     @Override
-    protected void configure() {
-        bind(HostSystem.class).to(JamesImapHostSystem.class);
-        bind(ImapHostSystem.class).to(JamesImapHostSystem.class);
+    public final boolean equals(Object o) {
+        if (o instanceof AliasName) {
+            AliasName aliasName = (AliasName) o;
+
+            return Objects.equals(this.value, aliasName.value);
+        }
+        return false;
     }
 
-    @Provides
-    @Singleton
-    public JamesImapHostSystem provideImapHostSystem() throws Exception {
-        return MaildirHostSystem.build();
+    @Override
+    public final int hashCode() {
+        return Objects.hash(value);
     }
-
 }

@@ -45,9 +45,11 @@ import org.apache.james.mailbox.jpa.mail.JPAUidProvider;
 import org.apache.james.mailbox.jpa.openjpa.OpenJPAMailboxManager;
 import org.apache.james.mailbox.jpa.quota.JPAPerUserMaxQuotaManager;
 import org.apache.james.mailbox.jpa.quota.JpaCurrentQuotaManager;
-import org.apache.james.mailbox.model.MailboxConstants;
 import org.apache.james.mailbox.store.JVMMailboxPathLocker;
+import org.apache.james.mailbox.store.StoreMailboxAnnotationManager;
 import org.apache.james.mailbox.store.StoreRightManager;
+import org.apache.james.mailbox.store.event.DefaultDelegatingMailboxListener;
+import org.apache.james.mailbox.store.event.MailboxEventDispatcher;
 import org.apache.james.mailbox.store.mail.model.DefaultMessageId;
 import org.apache.james.mailbox.store.mail.model.impl.MessageParser;
 import org.apache.james.mailbox.store.quota.DefaultQuotaRootResolver;
@@ -63,21 +65,21 @@ import com.google.common.collect.ImmutableList;
 public class JPAHostSystem extends JamesImapHostSystem {
 
     private static final JpaTestCluster JPA_TEST_CLUSTER = JpaTestCluster.create(
-            ImmutableList.<Class<?>>builder()
-                    .addAll(JPAMailboxFixture.MAILBOX_PERSISTANCE_CLASSES)
-                    .addAll(JPAMailboxFixture.QUOTA_PERSISTANCE_CLASSES)
-                    .build());
+        ImmutableList.<Class<?>>builder()
+            .addAll(JPAMailboxFixture.MAILBOX_PERSISTANCE_CLASSES)
+            .addAll(JPAMailboxFixture.QUOTA_PERSISTANCE_CLASSES)
+            .build());
 
     public static final String META_DATA_DIRECTORY = "target/user-meta-data";
     private static final ImapFeatures SUPPORTED_FEATURES = ImapFeatures.of(Feature.NAMESPACE_SUPPORT,
-            Feature.USER_FLAGS_SUPPORT,
-            Feature.ANNOTATION_SUPPORT,
-            Feature.QUOTA_SUPPORT);
+        Feature.USER_FLAGS_SUPPORT,
+        Feature.ANNOTATION_SUPPORT,
+        Feature.QUOTA_SUPPORT);
 
     public static JamesImapHostSystem build() throws Exception {
         return new JPAHostSystem();
     }
-
+    
     private JPAPerUserMaxQuotaManager maxQuotaManager;
     private OpenJPAMailboxManager mailboxManager;
 
@@ -95,11 +97,12 @@ public class JPAHostSystem extends JamesImapHostSystem {
         MessageParser messageParser = new MessageParser();
 
         StoreRightManager storeRightManager = new StoreRightManager(mapperFactory, aclResolver, groupMembershipResolver);
-        boolean useStreaming = false;
-        mailboxManager = new OpenJPAMailboxManager(mapperFactory, authenticator, authorizator, locker, useStreaming,
-                messageParser, new DefaultMessageId.Factory(),
-                MailboxConstants.DEFAULT_LIMIT_ANNOTATIONS_ON_MAILBOX,
-                MailboxConstants.DEFAULT_LIMIT_ANNOTATION_SIZE, storeRightManager);
+        DefaultDelegatingMailboxListener delegatingListener = new DefaultDelegatingMailboxListener();
+        MailboxEventDispatcher mailboxEventDispatcher = new MailboxEventDispatcher(delegatingListener);
+        StoreMailboxAnnotationManager annotationManager = new StoreMailboxAnnotationManager(mapperFactory, storeRightManager);
+        mailboxManager = new OpenJPAMailboxManager(mapperFactory, authenticator, authorizator,
+            messageParser, new DefaultMessageId.Factory(), delegatingListener,
+            mailboxEventDispatcher, annotationManager, storeRightManager);
 
         DefaultQuotaRootResolver quotaRootResolver = new DefaultQuotaRootResolver(mapperFactory);
         JpaCurrentQuotaManager currentQuotaManager = new JpaCurrentQuotaManager(entityManagerFactory);
@@ -113,11 +116,11 @@ public class JPAHostSystem extends JamesImapHostSystem {
         mailboxManager.init();
 
         SubscriptionManager subscriptionManager = new JPASubscriptionManager(mapperFactory);
-
-        final ImapProcessor defaultImapProcessorFactory =
+        
+        final ImapProcessor defaultImapProcessorFactory = 
                 DefaultImapProcessorFactory.createDefaultProcessor(
-                        mailboxManager,
-                        subscriptionManager,
+                        mailboxManager, 
+                        subscriptionManager, 
                         storeQuotaManager,
                         quotaRootResolver,
                         new DefaultMetricFactory());
@@ -138,7 +141,7 @@ public class JPAHostSystem extends JamesImapHostSystem {
             mailboxManager.logout(session, false);
         }
     }
-
+    
     public void resetUserMetaData() throws Exception {
         File dir = new File(META_DATA_DIRECTORY);
         if (dir.exists()) {

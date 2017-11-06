@@ -28,10 +28,12 @@ import org.apache.james.mailbox.model.MailboxPath;
 import org.apache.james.mailbox.model.MessageId;
 import org.apache.james.mailbox.store.Authenticator;
 import org.apache.james.mailbox.store.Authorizator;
-import org.apache.james.mailbox.store.JVMMailboxPathLocker;
+import org.apache.james.mailbox.store.StoreMailboxAnnotationManager;
 import org.apache.james.mailbox.store.StoreMailboxManager;
 import org.apache.james.mailbox.store.StoreMessageManager;
 import org.apache.james.mailbox.store.StoreRightManager;
+import org.apache.james.mailbox.store.event.DelegatingMailboxListener;
+import org.apache.james.mailbox.store.event.MailboxEventDispatcher;
 import org.apache.james.mailbox.store.mail.model.Mailbox;
 import org.apache.james.mailbox.store.mail.model.impl.MessageParser;
 
@@ -44,20 +46,15 @@ public class JCRMailboxManager extends StoreMailboxManager implements JCRImapCon
     public JCRMailboxManager(JCRMailboxSessionMapperFactory mapperFactory,
                              Authenticator authenticator,
                              Authorizator authorizator,
-                             MessageParser messageParser,
-                             MessageId.Factory messageIdFactory,
-                             StoreRightManager storeRightManager) {
-	    this(mapperFactory, authenticator, authorizator, new JVMMailboxPathLocker(), messageParser, messageIdFactory, storeRightManager);
-    }
-
-    public JCRMailboxManager(JCRMailboxSessionMapperFactory mapperFactory,
-                             Authenticator authenticator,
-                             Authorizator authorizator,
                              MailboxPathLocker locker,
                              MessageParser messageParser,
                              MessageId.Factory messageIdFactory,
+                             MailboxEventDispatcher mailboxEventDispatcher,
+                             DelegatingMailboxListener delegatingMailboxListener,
+                             StoreMailboxAnnotationManager annotationManager,
                              StoreRightManager storeRightManager) {
-        super(mapperFactory, authenticator, authorizator, locker, messageParser, messageIdFactory, storeRightManager);
+        super(mapperFactory, authenticator, authorizator, locker, messageParser, messageIdFactory,
+            annotationManager, mailboxEventDispatcher, delegatingMailboxListener, storeRightManager);
     }
 
     @Override

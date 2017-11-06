@@ -19,7 +19,6 @@
 package org.apache.james.mailbox.store.mail.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import javax.mail.Flags;
 import javax.mail.Flags.Flag;
@@ -58,6 +57,15 @@ public class FlagsFactoryTest {
     @Test
     public void builderShouldNotRequireUserFlagsWhenFlagsInstanceDefined() {
         assertThat(FlagsFactory.builder().flags(new Flags()).build()).isNotNull();
+    }
+
+    @Test
+    public void builderShouldAcceptNullUserFlags() {
+        assertThat(
+            FlagsFactory.builder()
+                .addUserFlags(null)
+                .build())
+            .isEqualTo(new Flags());
     }
 
     @Test

@@ -40,7 +40,11 @@ import org.apache.james.mailbox.hbase.mail.HBaseUidProvider;
 import org.apache.james.mailbox.model.MessageId;
 import org.apache.james.mailbox.store.Authenticator;
 import org.apache.james.mailbox.store.Authorizator;
+import org.apache.james.mailbox.store.JVMMailboxPathLocker;
+import org.apache.james.mailbox.store.StoreMailboxAnnotationManager;
 import org.apache.james.mailbox.store.StoreRightManager;
+import org.apache.james.mailbox.store.event.DefaultDelegatingMailboxListener;
+import org.apache.james.mailbox.store.event.MailboxEventDispatcher;
 import org.apache.james.mailbox.store.mail.model.DefaultMessageId;
 import org.apache.james.mailbox.store.mail.model.impl.MessageParser;
 import org.junit.After;
@@ -66,13 +70,19 @@ public class HBaseMailboxManagerTest extends MailboxManagerTest {
 
         Authenticator noAuthenticator = null;
         Authorizator noAuthorizator = null;
+        DefaultDelegatingMailboxListener delegatingListener = new DefaultDelegatingMailboxListener();
+        MailboxEventDispatcher mailboxEventDispatcher = new MailboxEventDispatcher(delegatingListener);
+        StoreMailboxAnnotationManager annotationManager = new StoreMailboxAnnotationManager(mapperFactory, storeRightManager);
         HBaseMailboxManager manager = new HBaseMailboxManager(mapperFactory,
             noAuthenticator,
             noAuthorizator,
+            new JVMMailboxPathLocker(),
             new MessageParser(),
             messageIdFactory,
-            storeRightManager
-        );
+            mailboxEventDispatcher,
+            delegatingListener,
+            annotationManager,
+            storeRightManager);
 
         try {
             manager.init();

@@ -29,7 +29,10 @@ import org.apache.james.mailbox.exception.MailboxException;
 import org.apache.james.mailbox.store.Authenticator;
 import org.apache.james.mailbox.store.Authorizator;
 import org.apache.james.mailbox.store.NoMailboxPathLocker;
+import org.apache.james.mailbox.store.StoreMailboxAnnotationManager;
 import org.apache.james.mailbox.store.StoreRightManager;
+import org.apache.james.mailbox.store.event.DefaultDelegatingMailboxListener;
+import org.apache.james.mailbox.store.event.MailboxEventDispatcher;
 import org.apache.james.mailbox.store.mail.model.impl.MessageParser;
 
 import com.datastax.driver.core.Session;
@@ -54,8 +57,14 @@ public class CassandraMailboxManagerProvider {
 
         Authenticator noAuthenticator = null;
         Authorizator noAuthorizator = null;
+        DefaultDelegatingMailboxListener delegatingMailboxListener = new DefaultDelegatingMailboxListener();
+        MailboxEventDispatcher mailboxEventDispatcher = new MailboxEventDispatcher(delegatingMailboxListener);
+        StoreMailboxAnnotationManager annotationManager = new StoreMailboxAnnotationManager(mapperFactory, storeRightManager,
+            LIMIT_ANNOTATIONS, LIMIT_ANNOTATION_SIZE);
+
         CassandraMailboxManager manager = new CassandraMailboxManager(mapperFactory, noAuthenticator, noAuthorizator, new NoMailboxPathLocker(),
-            messageParser, messageIdFactory, LIMIT_ANNOTATIONS, LIMIT_ANNOTATION_SIZE, storeRightManager);
+            messageParser, messageIdFactory, mailboxEventDispatcher, delegatingMailboxListener,
+            annotationManager, storeRightManager);
         try {
             manager.init();
         } catch (MailboxException e) {

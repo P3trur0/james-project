@@ -26,11 +26,11 @@ import javax.inject.Inject;
 import org.apache.james.mailbox.MailboxPathLocker;
 import org.apache.james.mailbox.MailboxSession;
 import org.apache.james.mailbox.exception.MailboxException;
-import org.apache.james.mailbox.model.MailboxConstants;
 import org.apache.james.mailbox.model.MessageId;
 import org.apache.james.mailbox.store.Authenticator;
 import org.apache.james.mailbox.store.Authorizator;
 import org.apache.james.mailbox.store.MailboxSessionMapperFactory;
+import org.apache.james.mailbox.store.StoreMailboxAnnotationManager;
 import org.apache.james.mailbox.store.StoreMailboxManager;
 import org.apache.james.mailbox.store.StoreMessageManager;
 import org.apache.james.mailbox.store.StoreRightManager;
@@ -45,22 +45,12 @@ public class InMemoryMailboxManager extends StoreMailboxManager {
     @Inject
     public InMemoryMailboxManager(MailboxSessionMapperFactory mailboxSessionMapperFactory, Authenticator authenticator, Authorizator authorizator,
                                   MailboxPathLocker locker, MessageParser messageParser, MessageId.Factory messageIdFactory, MailboxEventDispatcher dispatcher,
-                                  DelegatingMailboxListener delegatingMailboxListener, StoreRightManager storeRightManager) {
-        super(mailboxSessionMapperFactory, authenticator, authorizator, locker, messageParser, messageIdFactory,
-            MailboxConstants.DEFAULT_LIMIT_ANNOTATIONS_ON_MAILBOX, MailboxConstants.DEFAULT_LIMIT_ANNOTATION_SIZE, dispatcher,
-            delegatingMailboxListener, storeRightManager);
-    }
-
-    public InMemoryMailboxManager(MailboxSessionMapperFactory mailboxSessionMapperFactory, Authenticator authenticator, Authorizator authorizator,
-                                  MailboxPathLocker locker, MessageParser messageParser, MessageId.Factory messageIdFactory, StoreRightManager storeRightManager) {
-        super(mailboxSessionMapperFactory, authenticator, authorizator, locker, messageParser, messageIdFactory, storeRightManager);
-    }
-
-    public InMemoryMailboxManager(MailboxSessionMapperFactory mailboxSessionMapperFactory, Authenticator authenticator,  Authorizator authorizator,
-                                  MessageParser messageParser, MessageId.Factory messageIdFactory,
-                                  int limitOfAnnotations, int limitAnnotationSize,
+                                  DelegatingMailboxListener delegatingMailboxListener,
+                                  StoreMailboxAnnotationManager annotationManager,
                                   StoreRightManager storeRightManager) {
-        super(mailboxSessionMapperFactory, authenticator, authorizator, messageParser, messageIdFactory, limitOfAnnotations, limitAnnotationSize, storeRightManager);
+        super(mailboxSessionMapperFactory, authenticator, authorizator, locker, messageParser, messageIdFactory,
+            annotationManager, dispatcher,
+            delegatingMailboxListener, storeRightManager);
     }
 
     @Override
